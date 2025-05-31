@@ -1,0 +1,20 @@
+[
+  {
+    "action": "Use coconut husks, banana leaves, sugarcane trash, or dry grass as mulch to cover soil between crop rows.",
+    "reward_points": 10,
+    "status": "Pending",
+    "target_date": "2024-07-01"
+  },
+  {
+    "action": "Shift irrigation schedules to before 9 AM or after 5 PM to reduce evaporation loss.",
+    "reward_points": 8,
+    "status": "Pending",
+    "target_date": "2024-07-05"
+  },
+  {
+    "action": "Plant fast-growing native shade trees (e.g., Gliricidia, Neem, Pongamia) along farm borders.",
+    "reward_points": 15,
+    "status": "Pending",
+    "target_date": "2024-07-10"
+  }
+]

@@ -1,0 +1,10 @@
+langchain
+langchain-ibm 
+langchain_community 
+ibm-watsonx-ai 
+ibm_watson_machine_learning 
+pgvector 
+psycopg2-binary 
+fastapi 
+uvicorn 
+sentence-transformers

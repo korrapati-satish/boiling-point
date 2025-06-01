@@ -38,10 +38,12 @@ text_llm = WatsonxLLM(
     apikey=credentials.get("apikey"),
     project_id=project_id,
     params={
-        GenParams.DECODING_METHOD: "greedy",
-        GenParams.TEMPERATURE: 0,
-        GenParams.MIN_NEW_TOKENS: 5,
-        GenParams.MAX_NEW_TOKENS: 250
+        GenParams.DECODING_METHOD: "sample",
+        GenParams.TEMPERATURE: 0.5,
+        GenParams.MIN_NEW_TOKENS: 1,
+        GenParams.MAX_NEW_TOKENS: 4096,
+        "repetition_penalty": 1,
+        "stop_sequences": []   
     },
 )
 
@@ -54,7 +56,7 @@ image_llm = WatsonxLLM(
         GenParams.DECODING_METHOD: "greedy",
         GenParams.TEMPERATURE: 0,
         GenParams.MIN_NEW_TOKENS: 5,
-        GenParams.MAX_NEW_TOKENS: 250
+        GenParams.MAX_NEW_TOKENS: 500
     },
 )
 
@@ -109,7 +111,7 @@ Suggest the **three most impactful and realistic actions** that this person can 
 2. Locally relevant to the environmental and socio-economic context of the location.
 3. Feasible, measurable, and contributing toward long-term sustainability.
 
-Respond **ONLY** with JSON in the exact format below. Do **NOT** add explanations or markdown fences.
+Respond **ONLY** in exact JSON format below. **The JSON keys must remain in English as shown. Only translate the values into {language}.** Do **NOT** add explanations or markdown fences.
 
 {{
   "Action 1": "First action description.",
@@ -134,7 +136,7 @@ Selected Action:
 
 Based on the above context and the selected action, provide a concise, step-by-step guide that the user can follow to implement this action effectively in India.
 
-Respond **ONLY** with JSON in the exact format below. Do **NOT** add explanations or markdown fences.
+Respond **ONLY** in exact JSON format below. **The JSON keys must remain in English as shown. Only translate the values into {language}.** Do **NOT** add explanations or markdown fences.
 
 {{
   "Step 1": "First step description.",
@@ -278,10 +280,10 @@ def parse_json_output(text):
         elif text.startswith("```json"):
             text = text.strip("```json").strip("```").strip()
 
-        #print(text)
+        print(text)
         parsed = json.loads(text)
-        #print('parsing...')
-        #print(parsed)
+        print('parsing...')
+        print(parsed)
         return AgentFinish({"output": parsed}, text)
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse JSON: {e}\nOriginal text: {text}")
@@ -290,13 +292,15 @@ def contextual_options_chain():
     return RunnableMap({
         "context": lambda x: get_context.invoke(f"""Role: {x["role"]}, Location: {x["location"]}"""),
         "role": lambda x: x["role"],
-        "location": lambda x: x["location"]
+        "location": lambda x: x["location"],
+        "language": lambda x: x["language"],
     }) | options_prompt_template | text_llm | RunnableLambda(parse_json_output)
 
 def contextual_follow_up_chain():
     return RunnableMap({
-        "context": lambda x: get_context.invoke(x["input"]),
-        "action": lambda x: x["action"]
+        "context": lambda x: get_context.invoke(f"""Role: {x["role"]}, Location: {x["location"]}"""),
+        "action": lambda x: x["action"],
+        "language": lambda x: x["language"],
     }) | follow_up_prompt_template | text_llm | RunnableLambda(parse_json_output)
 
 # def invoke_vision_llm():
@@ -427,24 +431,30 @@ app = FastAPI()
 class UserRequest(BaseModel):
     role: str
     location: str
+    language: str
 
-class OptionSelection(BaseModel):
+class ActionSelection(BaseModel):
+    role: str
+    location: str
     email_id: str
     action: str
+    language: str
 
 class StepCompletion(BaseModel):
     email_id: str
     action: str
     step_description: str
+    language: str
 
-# API 1: Retrieve relevant documents and get options from WatsonX
-@app.post("/get-options")
-async def get_options(request: UserRequest):
+# API 1: Retrieve relevant documents and get actions from WatsonX
+@app.post("/get-actions")
+async def get_actions(request: UserRequest):
     try:
         #do a vector search based on role, location and add language
         response = options_agent_executor.invoke({
             "role": request.role,
-            "location": request.location
+            "location": request.location,
+            "language": request.language
         })
 
         print(response)
@@ -453,15 +463,15 @@ async def get_options(request: UserRequest):
         raise HTTPException(status_code=500, detail=f"Error retrieving options: {str(e)}")
     
 # API 2: Generate steps, persist in DB, and track updates
-@app.post("/select-option")
-async def select_option(selection: OptionSelection):
+@app.post("/select-action")
+async def select_action(selection: ActionSelection):
     try:
-        # Generate steps using LLM
-        #steps = llm.generate(f"Generate steps for the selected option: {selection.selected_option}")
 
         response = follow_up_agent_executor.invoke({
-            "input": "ground water",
-            "action": selection.action
+            "role": selection.role,
+            "location": selection.location,
+            "action": selection.action,
+            "language": selection.language
         })
 
         #do a vector search based on role, location and add language

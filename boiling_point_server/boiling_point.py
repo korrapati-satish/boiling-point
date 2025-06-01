@@ -3,8 +3,6 @@ from langchain_community.llms import Replicate
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain.prompts import PromptTemplate
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
-from langchain.agents.output_parsers import JSONAgentOutputParser
-from langchain.output_parsers import OutputFixingParser
 from langchain_core.agents import AgentFinish
 from langchain.schema.runnable import RunnableLambda
 from langchain.agents import AgentExecutor
@@ -12,10 +10,10 @@ from langchain.tools import tool
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableMap
-from langchain.chains import LLMChain
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi import UploadFile, File, Form
-from typing import List
+from typing import List,Optional
 from pydantic import BaseModel
 from jinja2 import Template
 import json
@@ -159,7 +157,8 @@ Action:
 Description:
 {{description}}
 
-Your task is to carefully observe photo , and describe everything you can infer from it as per the provided context, action and description.
+Your task is to carefully observe photo , and describe everything you can infer from it in as per the provided context, action and description.
+
 
 """
 
@@ -192,10 +191,10 @@ Instructions:
 - Provide 1-2 lines of feedback explaining your rating.
 - Be specific and reference context if needed.
 
-Respond **ONLY** with JSON in the exact format below. Do **NOT** add explanations or markdown fences.
+Respond **ONLY** with JSON in the exact format below. **The JSON keys must remain in English as shown. Only translate the values into {{language}}. Do **NOT** add explanations or markdown fences.
 
 {
-    "Action":{{action}}, ""Rating": "X/5", "Feedback": "..."
+    "Action":"{{action}}", "Rating": "X/5", "Feedback": "..."
 }
 
 Do not include any additional text, explanation, or formatting outside the JSON object.
@@ -221,7 +220,8 @@ def render_text_steps_prompt(inputs):
     rendered = text_jinja_template.render(
         context=inputs["context"],
         action=inputs["action"],
-        steps_and_observations=inputs["steps_and_observations"]  # List of tuples (description, observation)
+        steps_and_observations=inputs["steps_and_observations"],  # List of tuples (description, observation)
+        language=inputs["language"]
     )
     return rendered
 
@@ -288,9 +288,9 @@ def encode_image(image_bytes: bytes, format: str = "PNG") -> str:
 
     return base64_encoded
 
-def call_watsonx_vision(prompt: str, steps_and_phots:list, action: str, context: str):
+def call_watsonx_vision(prompt: str, steps_and_phots:list, action: str, context: str, language: str):
 
-    final_response = {"action": action, "context": context, "steps_and_observations": []}
+    final_response = {"action": action, "context": context, "steps_and_observations": [], "language": language}
 
     for step_desc, step_image in steps_and_phots:
         message = [
@@ -324,6 +324,7 @@ def fetch_image_description():
         x["steps_and_photos"],
         x["action"],
         x["context"],
+        x["language"]
     ))
 
 text_chain = RunnableLambda(render_text_steps_prompt) | text_llm | RunnableLambda(parse_json_output)
@@ -332,7 +333,8 @@ def contextual_steps_completed_chain():
     return RunnableMap({
         "context": lambda x: get_context.invoke(f"""Role: {x["role"]}, Location: {x["location"]}"""),
         "action": lambda x: x["action"],
-        "steps_and_photos": lambda x: [(step["step_description"], step["step_photos"]) for step in x["steps"]]
+        "steps_and_photos": lambda x: [(step["step_description"], step["step_photos"]) for step in x["steps"]],
+        "language": lambda x: x["language"]
     }) | fetch_image_description() | text_chain
 
 options_agent = contextual_options_chain()
@@ -384,6 +386,7 @@ actions_table = Table(
     Column("action_name", String, nullable=False),
     Column("rating", String, nullable=True), # Rating of the step.
     Column("rating_reason", String, nullable=True), # Rating reason of the step.
+    Column("status", String, default="pending"),  # Status of the action (e.g., pending, completed)
     Column("metadata", JSON, nullable=True),  # Optional metadata for the action
 )
 
@@ -392,6 +395,15 @@ metadata.create_all(engine)
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# Enable all cross-origin requests (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Models
 class UserRequest(BaseModel):
@@ -404,6 +416,7 @@ class ActionSelection(BaseModel):
     location: str
     email_id: str
     action: str
+    status: Optional[str] = None
     language: str
 
 class StepCompletion(BaseModel):
@@ -446,6 +459,13 @@ async def select_action(selection: ActionSelection):
 
         with engine.connect() as connection:
             transaction = connection.begin()  # Start a transaction
+            connection.execute(
+                    actions_table.insert()
+                    .values(
+                        email_id=selection.email_id,
+                        action_name=selection.action
+                    )
+            )
             for step_name, step_description in steps.items():
                 connection.execute(
                     steps_table.insert().values(
@@ -487,7 +507,6 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
             # Iterate over each step data and photo
             for step, step_photo in zip(completion, step_photos):
                 photo_data = await step_photo.read()
-                #photo_data = base64.b64encode(photo_data).decode("utf-8")
                 connection.execute(
                     update(steps_table)
                     .where(
@@ -506,6 +525,7 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
         action_name = completion[0].get('action')
         location = completion[0].get('location')
         role = completion[0].get('role')
+        language = completion[0].get('language')
         with engine.connect() as connection:
             transaction = connection.begin() 
             result = connection.execute(
@@ -527,6 +547,7 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
                 "role": role,
                 "location": location,
                 "action": action_name,
+                "language": language,
                 "steps": [
                     {
                         "step_description": step["step_description"],
@@ -562,3 +583,21 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
     except Exception as e:
         raise e
         raise HTTPException(status_code=500, detail=f"Error submitting steps: {str(e)}")
+    
+@app.get("/health")
+def test_vector():
+    try:
+        # Step 1: Check vector dimension
+        query_vector = embeddings.embed_query("test")
+
+        # Step 2: Add test documents if needed
+        vectorstore.add_texts(["soil contains nitrogen", "nitrogen is important", "plants absorb nitrogen"])
+
+        # Perform a simple query to test the vector store connection
+        docs = vectorstore.similarity_search("""soil contains units of nitrogen""",k=3)
+        if docs:
+            return {"status": "ok", "message": "Vector store is healthy."}
+        else:
+            return {"status": "error", "message": "No documents found in vector store."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

@@ -583,21 +583,3 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
     except Exception as e:
         raise e
         raise HTTPException(status_code=500, detail=f"Error submitting steps: {str(e)}")
-    
-@app.get("/health")
-def test_vector():
-    try:
-        # Step 1: Check vector dimension
-        query_vector = embeddings.embed_query("test")
-
-        # Step 2: Add test documents if needed
-        vectorstore.add_texts(["soil contains nitrogen", "nitrogen is important", "plants absorb nitrogen"])
-
-        # Perform a simple query to test the vector store connection
-        docs = vectorstore.similarity_search("""soil contains units of nitrogen""",k=3)
-        if docs:
-            return {"status": "ok", "message": "Vector store is healthy."}
-        else:
-            return {"status": "error", "message": "No documents found in vector store."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}

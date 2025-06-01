@@ -21,13 +21,21 @@ import base64
 import io
 from PIL import Image, ImageOps
 from fastapi import File, UploadFile
+import sqlalchemy
 from sqlalchemy import LargeBinary
 from sqlalchemy import create_engine, Table, Column, update, String, JSON, MetaData
+from sqlalchemy import event
 from ibm_watsonx_ai.foundation_models import ModelInference
 from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from google.cloud.alloydb.connector import Connector
+from google.cloud.alloydbconnector.enums import IPTypes
+
+
+# --- Hardcoded configuration for both local and cloud ---
+USE_ALLOYDB_CONNECTOR = True  # Set to True to use AlloyDB connector (cloud), False for local
 
 # Password hashing utility
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -41,6 +49,7 @@ credentials = {
     "url": 'https://us-south.ml.cloud.ibm.com',
     "apikey": 'XDiRCehfnJA-BSC_URM_PgCT-TQoznaYhd5jJZ0PKHZi'
 }
+
 project_id = '4bf4e5d6-d94c-4b68-85af-c9d0206e0194'
 
 text_llm = WatsonxLLM(
@@ -73,15 +82,71 @@ vision = ModelInference(
 
 embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-278m-multilingual")
 
+
+# Local connection string (psycopg2)
 CONNECTION_STRING = "postgresql+psycopg2://postgres:T8UQUIPiu#IZOZe3@34.174.7.160:5432/postgres?options=-csearch_path=boiling_point_vdb"
+
+PSC_CONNECTION_STRING = "postgresql+psycopg2://postgres:T8UQUIPiu#IZOZe3@10.10.0.2:5432/postgres?options=-csearch_path=boiling_point_vdb"
+
+# AlloyDB (cloud) settings
+ALLOYDB_INSTANCE_URI = "projects/vaulted-hangout-460908-n9/locations/us-south1/clusters/boiling-point/instances/primary-instance"
+DB_USER = "postgres"
+DB_PASSWORD = "T8UQUIPiu#IZOZe3"
+DB_NAME = "postgres"
+
+
+# CONNECTION_STRING = "postgresql+psycopg2://postgres:T8UQUIPiu#IZOZe3@34.174.7.160:5432/postgres?options=-csearch_path=boiling_point_vdb"
 
 COLLECTION_NAME = "boiling_point_vdb.final_data"
 
-vectorstore = PGVector(
-    collection_name=COLLECTION_NAME,
-    connection_string=CONNECTION_STRING,
-    embedding_function=embeddings,
-)
+
+if USE_ALLOYDB_CONNECTOR:
+    # Use the same creator pattern for PGVector
+    connector = Connector()
+    def getconn():
+        return connector.connect(
+            ALLOYDB_INSTANCE_URI,
+            "pg8000",
+            user=DB_USER,
+            password=DB_PASSWORD,
+            db=DB_NAME,
+            ip_type=IPTypes.PUBLIC
+        )
+    
+    engine = sqlalchemy.create_engine(
+    "postgresql+pg8000://",             # empty URL → connector supplies sockets
+    creator=getconn,
+    pool_pre_ping=True, pool_size=10, max_overflow=2
+   )
+    
+    # Set search_path for every new connection
+    @event.listens_for(engine, "connect")
+    def set_search_path(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute('SET search_path TO boiling_point_vdb;')
+        cursor.close()
+    
+    vectorstore = PGVector(
+        connection_string="postgresql+pg8000://",  # dummy, but required
+        collection_name    = COLLECTION_NAME,
+        connection         = engine,        # can also use connection_string="..."
+        embedding_function = embeddings
+    )
+
+    # vectorstore = PGVector(
+    #     collection_name=COLLECTION_NAME,
+    #     connection_string=PSC_CONNECTION_STRING,
+    #     embedding_function=embeddings,
+    # )
+else:
+    vectorstore = PGVector(
+        collection_name=COLLECTION_NAME,
+        connection_string=CONNECTION_STRING,
+        embedding_function=embeddings,
+    )
+
+    # Create SQLAlchemy engine and metadata
+    engine = create_engine(CONNECTION_STRING)
 
 retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
@@ -373,8 +438,7 @@ steps_completed_agent_executor = AgentExecutor(
     verbose=True
 )
 
-# Create SQLAlchemy engine and metadata
-engine = create_engine(CONNECTION_STRING)
+
 metadata = MetaData()
 
 # Define the users table

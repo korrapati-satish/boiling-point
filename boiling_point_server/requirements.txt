@@ -9,4 +9,7 @@ fastapi
 uvicorn 
 sentence-transformers
 python-multipart
+passlib
+crypt
 google-cloud-alloydb-connector[pg8000]
+

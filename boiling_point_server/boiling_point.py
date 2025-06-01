@@ -26,7 +26,10 @@ from sqlalchemy import LargeBinary
 from sqlalchemy import create_engine, Table, Column, update, String, JSON, MetaData
 from sqlalchemy import event
 from ibm_watsonx_ai.foundation_models import ModelInference
-from transformers import AutoProcessor
+from fastapi import Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 from google.cloud.alloydb.connector import Connector
 from google.cloud.alloydbconnector.enums import IPTypes
 
@@ -34,11 +37,19 @@ from google.cloud.alloydbconnector.enums import IPTypes
 # --- Hardcoded configuration for both local and cloud ---
 USE_ALLOYDB_CONNECTOR = True  # Set to True to use AlloyDB connector (cloud), False for local
 
+# Password hashing utility
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Dependency to get the database session
+def get_db():
+    with engine.connect() as connection:
+        yield connection
 
 credentials = {
     "url": 'https://us-south.ml.cloud.ibm.com',
     "apikey": 'XDiRCehfnJA-BSC_URM_PgCT-TQoznaYhd5jJZ0PKHZi'
 }
+
 project_id = '4bf4e5d6-d94c-4b68-85af-c9d0206e0194'
 
 text_llm = WatsonxLLM(
@@ -430,6 +441,18 @@ steps_completed_agent_executor = AgentExecutor(
 
 metadata = MetaData()
 
+# Define the users table
+users_table = Table(
+    "users",
+    metadata,
+    Column("email_id", String, primary_key=True, nullable=False),
+    Column("name", String, nullable=False),
+    Column("password", String, nullable=False),  # Hashed password
+    Column("role", String, nullable=False),  # User's role (e.g., admin, user)
+    Column("location", String, nullable=False),  # User's location
+    Column("language", String, nullable=False),  # User's preferred language
+)
+
 # Define the steps table
 steps_table = Table(
     "user_steps",
@@ -647,3 +670,83 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
     except Exception as e:
         raise e
         raise HTTPException(status_code=500, detail=f"Error submitting steps: {str(e)}")
+    
+@app.post("/login")
+async def login(email_id: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    try:
+        # Query the user from the database
+        query = users_table.select().where(users_table.c.email_id == email_id)
+        user_result = db.execute(query).mappings().fetchone()
+
+        if not user_result:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Validate the password
+        stored_password = user_result["password"]
+        if not pwd_context.verify(password, stored_password):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Fetch user actions
+        actions_query = actions_table.select().where(actions_table.c.email_id == email_id)
+        actions_result = db.execute(actions_query).mappings().fetchall()
+
+        # Format the response
+        user_details = {
+            "email_id": user_result["email_id"],
+            "name": user_result["name"],
+            "role": user_result["role"],
+            "actions": [
+                {
+                    "action_name": action["action_name"],
+                    "status": action["status"]
+                }
+                for action in actions_result
+            ],
+            "location": user_result["location"],
+            "language": user_result["language"]
+        }
+
+        return {"message": "Login successful", "user": user_details}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during login: {str(e)}")
+    
+
+@app.post("/signup")
+async def signup(
+    email_id: str = Form(...),
+    password: str = Form(...),
+    name: str = Form(...),
+    role: str = Form(...),
+    location: str = Form(...),
+    language: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Hash the password
+        hashed_password = pwd_context.hash(password)
+
+        with db.begin():
+            # Insert the user into the database
+            query = users_table.insert().values(
+                email_id=email_id,
+                password=hashed_password,
+                name=name,
+                role=role,
+                location=location,
+                language=language
+            )
+            db.execute(query)
+
+        return {"message": "User registered successfully"}
+
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email ID already exists"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error during signup: {str(e)}"
+        )

@@ -21,13 +21,13 @@ class BoilingPointAction {
 }
 
 class BoilingPoint {
-  final String input;
+  final String? input;
   final String role;
   final String location;
   final List<BoilingPointAction> actions;
 
   BoilingPoint({
-    required this.input,
+    this.input,
     required this.role,
     required this.location,
     required this.actions,
@@ -40,7 +40,7 @@ class BoilingPoint {
         .toList();
 
     return BoilingPoint(
-      input: json['input'] as String,
+      input: json['input'] as String?,
       role: json['role'] as String,
       location: json['location'] as String,
       actions: actions,
@@ -48,7 +48,7 @@ class BoilingPoint {
   }
 
   Map<String, dynamic> toJson() => {
-        'input': input,
+        if (input != null) 'input': input,
         'role': role,
         'location': location,
         'output': {

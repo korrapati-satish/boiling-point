@@ -78,13 +78,15 @@ Future<BoilingPoint> getBoilingPointActions(String role, String location) async 
 
 
 
-Future<BoilingPointStepsResponse> fetchBoilingPointActionSteps(String emailId, String action) async {
+Future<BoilingPointStepsResponse> fetchBoilingPointActionSteps(String emailId, String action, String role, String location) async {
   // const url = 'http://127.0.0.1:8000/select-option';
-  final url = 'http://10.0.2.2:8000/get-options';
+  final url = 'http://10.0.2.2:8000/select-option';
   final headers = {"Content-Type": "application/json"};
   final body = jsonEncode({
     "email_id": emailId,
     "action": action,
+    "role": role,
+    "location": location,
   });
 
   print('[fetchBoilingPointActionSteps] Sending POST to $url');

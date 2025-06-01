@@ -17,6 +17,7 @@ from pydantic import BaseModel
 import re
 import json
 from sqlalchemy import create_engine, Table, Column, update, String, JSON, MetaData
+from fastapi.middleware.cors import CORSMiddleware
 
 credentials = {
     "url": 'https://us-south.ml.cloud.ibm.com',
@@ -266,7 +267,17 @@ steps_table = Table(
 metadata.create_all(engine)
 
 # Initialize FastAPI app
+
 app = FastAPI()
+
+# Enable all cross-origin requests (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Models
 class UserRequest(BaseModel):

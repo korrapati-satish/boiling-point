@@ -6,6 +6,15 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 class ActionSubmissionScreen extends StatefulWidget {
+  final String actionName;
+  final String userId;
+
+  const ActionSubmissionScreen({
+    Key? key,
+    required this.actionName,
+    required this.userId,
+  }) : super(key: key);
+
   @override
   _ActionSubmissionScreenState createState() => _ActionSubmissionScreenState();
 }
@@ -55,6 +64,8 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
     try {
       var uri = Uri.parse('https://your-backend-url.com/upload');
       var request = http.MultipartRequest('POST', uri);
+      request.fields['actionName'] = widget.actionName;
+      request.fields['userId'] = widget.userId;
       request.files.add(
         await http.MultipartFile.fromPath(
           'file',
@@ -103,7 +114,13 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Action: ${widget.actionName}',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 16),
             _previewFile(),
             SizedBox(height: 20),
             Row(

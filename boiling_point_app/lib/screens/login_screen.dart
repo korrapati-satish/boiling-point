@@ -102,7 +102,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Logged in successfully')),
                                 );
-                                Navigator.pushReplacementNamed(context, '/home');
+                                // Log the email id
+                                debugPrint('User logged in with email1: $email');
+                                Navigator.pushReplacementNamed(
+                                  context,
+                                  '/home',
+                                  arguments: {'email': email},
+                                );
                               }
                             },
                             child: const Text('Login'),

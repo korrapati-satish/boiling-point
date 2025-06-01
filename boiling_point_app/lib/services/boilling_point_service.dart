@@ -43,14 +43,15 @@ Future<List<BoingPointAction>> fetchActions() async {
   return actions;
 }
 
-Future<BoilingPoint> getBoilingPointActions(String role, String location) async {
-  //const url = 'http://127.0.0.1:8000/get-options';
-  final url = 'http://10.0.2.2:8000/get-options';
+Future<BoilingPoint> getBoilingPointActions(String role, String location, String language) async {
+  //const url = 'http://127.0.0.1:8000/get-actions';
+  final url = 'http://10.0.2.2:8000/get-actions';
 
   final headers = {"Content-Type": "application/json"};
   final body = jsonEncode({
     "role": role,
-    "location": location
+    "location": location,
+    "language": language // Add the required language field
   });
 
   print('[getBoilingPointActions] Sending POST to $url');
@@ -78,15 +79,16 @@ Future<BoilingPoint> getBoilingPointActions(String role, String location) async 
 
 
 
-Future<BoilingPointStepsResponse> fetchBoilingPointActionSteps(String emailId, String action, String role, String location) async {
-  // const url = 'http://127.0.0.1:8000/select-option';
-  final url = 'http://10.0.2.2:8000/select-option';
+Future<BoilingPointStepsResponse> fetchBoilingPointActionSteps(String emailId, String action, String role, String location, String selectedLanguage) async {
+  // const url = 'http://127.0.0.1:8000/select-action';
+  final url = 'http://10.0.2.2:8000/select-action';
   final headers = {"Content-Type": "application/json"};
   final body = jsonEncode({
     "email_id": emailId,
     "action": action,
     "role": role,
     "location": location,
+    "language": selectedLanguage // Add the required language field
   });
 
   print('[fetchBoilingPointActionSteps] Sending POST to $url');

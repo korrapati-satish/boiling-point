@@ -6,7 +6,18 @@ import 'package:boiling_point_app/services/boilling_point_service.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String email;
+  const HomeScreen({super.key, required this.email});
+
+  static Route routeFromArgs(RouteSettings settings) {
+    final args = settings.arguments as Map<String, dynamic>?;
+    final email = args?['email'] as String? ?? '';
+    debugPrint('HomeScreen.routeFromArgs: email = $email');
+    return MaterialPageRoute(
+      builder: (_) => HomeScreen(email: email),
+      settings: settings,
+    );
+  }
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -17,30 +28,39 @@ class _HomeScreenState extends State<HomeScreen> {
   String? selectedRegion;
   String? selectedLivelihood;
   String? selectedLanguage;
-
-  late Future<List<BoingPointAction>> actions;
+  
   late Future<BoilingPoint> boilingPoint;
   late Future<BoilingPointStepsResponse> boilingPointStepsResponse;
 
   final List<String> regions = [
-    // ... (same as before)
     'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Ahmedabad', 'Chennai', 'Kolkata', 'Surat', 'Pune', 'Jaipur', 'Lucknow', 'Kanpur', 'Nagpur', 'Indore', 'Thane', 'Bhopal', 'Visakhapatnam', 'Pimpri-Chinchwad', 'Patna', 'Vadodara', 'Ghaziabad', 'Ludhiana', 'Coimbatore', 'Agra', 'Madurai',
   ];
   final List<String> livelihoods = ['Farming', 'Fishing', 'Trading', 'Labor'];
   final List<String> languages = ['Hindi', 'Tamil', 'Telugu', 'Kannada', 'English'];
 
+  late String email;
+
   @override
   void initState() {
     super.initState();
-    actions = fetchActions();
-    boilingPoint = getBoilingPointActions('Farmer', 'Bengaluru');
+    email = widget.email.isNotEmpty ? widget.email : 'john@gmail.com';
+    debugPrint('HomeScreen initialized with email: $email');
+    // Log the email if it's not empty
+    if (email.isNotEmpty) {
+      debugPrint('User email: $email');
+    }
+
+    //boilingPoint = getBoilingPointActions('Farmer', 'Bengaluru', 'English');
+
     boilingPointStepsResponse = fetchBoilingPointActionSteps(
-      'arshitvyas123@gmail.com',
+      email,
       'Promote eco-friendly dog waste management',
       selectedLivelihood ?? 'Farming',
       selectedRegion ?? 'Andhra Pradesh',
+      selectedLanguage ?? 'English',
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -83,110 +103,111 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 children: [
                   // Card for form
-                  Card(
+                    Card(
                     elevation: 8,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    margin: const EdgeInsets.fromLTRB(24, 4, 24, 16), // Reduced top margin
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(20), // Slightly reduced padding
                       child: Form(
-                        key: _formKey,
-                        child: Column(
-                          children: [
-                            Text(
-                              'Personalize Your Actions',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.deepOrange[800],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(labelText: 'Region', border: OutlineInputBorder()),
-                              value: selectedRegion,
-                              items: regions
-                                  .map((region) => DropdownMenuItem(
-                                        value: region,
-                                        child: Text(region),
-                                      ))
-                                  .toList(),
-                              onChanged: (val) {
-                                setState(() {
-                                  selectedRegion = val;
-                                });
-                              },
-                              onSaved: (val) => selectedRegion = val,
-                              validator: (val) => val != null && val.isNotEmpty ? null : 'Select a region',
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(labelText: 'Livelihood', border: OutlineInputBorder()),
-                              value: selectedLivelihood,
-                              items: livelihoods
-                                  .map((livelihood) => DropdownMenuItem(
-                                        value: livelihood,
-                                        child: Text(livelihood),
-                                      ))
-                                  .toList(),
-                              onChanged: (val) {
-                                setState(() {
-                                  selectedLivelihood = val;
-                                });
-                              },
-                              onSaved: (val) => selectedLivelihood = val,
-                              validator: (val) => val != null && val.isNotEmpty ? null : 'Select a livelihood',
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(labelText: 'Language', border: OutlineInputBorder()),
-                              value: selectedLanguage,
-                              items: languages
-                                  .map((language) => DropdownMenuItem(
-                                        value: language,
-                                        child: Text(language),
-                                      ))
-                                  .toList(),
-                              onChanged: (val) {
-                                setState(() {
-                                  selectedLanguage = val;
-                                });
-                              },
-                              onSaved: (val) => selectedLanguage = val,
-                              validator: (val) => val != null && val.isNotEmpty ? null : 'Select a language',
-                            ),
-                            const SizedBox(height: 18),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepOrange,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                ),
-                                onPressed: () {
-                                  final form = _formKey.currentState!;
-                                  if (form.validate()) {
-                                    form.save();
-                                    setState(() {
-                                      boilingPoint = getBoilingPointActions(
-                                        selectedLivelihood ?? 'User',
-                                        selectedRegion ?? 'Andhra Pradesh',
-                                      );
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                            'Region: $selectedRegion, Livelihood: $selectedLivelihood, Language: $selectedLanguage'),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: const Text('Get My Actions', style: TextStyle(fontSize: 16)),
-                              ),
-                            ),
-                          ],
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                        Text(
+                          'Personalize Your Actions',
+                          style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange[800],
+                          ),
                         ),
+                        const SizedBox(height: 12), // Reduced space
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Region', border: OutlineInputBorder()),
+                          value: selectedRegion,
+                          items: regions
+                            .map((region) => DropdownMenuItem(
+                              value: region,
+                              child: Text(region),
+                              ))
+                            .toList(),
+                          onChanged: (val) {
+                          setState(() {
+                            selectedRegion = val;
+                          });
+                          },
+                          onSaved: (val) => selectedRegion = val,
+                          validator: (val) => val != null && val.isNotEmpty ? null : 'Select a region',
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Livelihood', border: OutlineInputBorder()),
+                          value: selectedLivelihood,
+                          items: livelihoods
+                            .map((livelihood) => DropdownMenuItem(
+                              value: livelihood,
+                              child: Text(livelihood),
+                              ))
+                            .toList(),
+                          onChanged: (val) {
+                          setState(() {
+                            selectedLivelihood = val;
+                          });
+                          },
+                          onSaved: (val) => selectedLivelihood = val,
+                          validator: (val) => val != null && val.isNotEmpty ? null : 'Select a livelihood',
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Language', border: OutlineInputBorder()),
+                          value: selectedLanguage,
+                          items: languages
+                            .map((language) => DropdownMenuItem(
+                              value: language,
+                              child: Text(language),
+                              ))
+                            .toList(),
+                          onChanged: (val) {
+                          setState(() {
+                            selectedLanguage = val;
+                          });
+                          },
+                          onSaved: (val) => selectedLanguage = val,
+                          validator: (val) => val != null && val.isNotEmpty ? null : 'Select a language',
+                        ),
+                        const SizedBox(height: 14), // Reduced space
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepOrange,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: () {
+                            final form = _formKey.currentState!;
+                            if (form.validate()) {
+                            form.save();
+                            setState(() {
+                              boilingPoint = getBoilingPointActions(
+                              selectedLivelihood ?? 'Farming',
+                              selectedRegion ?? 'Bangalore',
+                              selectedLanguage ?? 'English',
+                              );
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                              content: Text(
+                                'Region: $selectedRegion, Livelihood: $selectedLivelihood, Language: $selectedLanguage'),
+                              ),
+                            );
+                            }
+                          },
+                          child: const Text('Get My Actions', style: TextStyle(fontSize: 16)),
+                          ),
+                        ),
+                        ],
+                      ),
                       ),
                     ),
                   ),
@@ -225,10 +246,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('Role: ${boilingPointData.role}',
+                                        Text('Role: ${selectedLivelihood ?? 'Farming'}',
                                             style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        Text('Location: ${boilingPointData.location}',
-                                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        Text('Location: ${selectedRegion ?? 'Bengaluru'}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        Text('Language: ${selectedLanguage ?? 'English'}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold)),
                                       ],
                                     ),
                                   ),
@@ -266,13 +289,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   ),
                                                   icon: const Icon(Icons.list_alt),
                                                   label: const Text('Steps'),
-                                                  onPressed: () async {
-                                                    const email = 'arshitvyas123@gmail.com';
+                                                  onPressed: () async {                                                  
                                                     final stepsResponse = await fetchBoilingPointActionSteps(
                                                       email,
-                                                      'Promote eco-friendly dog waste management',
+                                                      action.description,
                                                       selectedLivelihood ?? 'Farming',
                                                       selectedRegion ?? 'Andhra Pradesh',
+                                                      selectedLanguage  ?? 'English',
                                                     );
                                                     if (!mounted) return;
                                                     showDialog(
@@ -319,16 +342,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   ),
                                                   icon: const Icon(Icons.check),
                                                   label: const Text('Complete'),
-                                                  onPressed: () {
-                                                    const userId = 'arshitvyas123@gmail.com';
-                                                    final actionName = action.title;
+                                                  onPressed: () {                                                  
+                                                    final actionName = action.description;
                                                     if (actionName.isNotEmpty) {
                                                       Navigator.push(
                                                         context,
                                                         MaterialPageRoute(
                                                           builder: (context) => ActionSubmissionScreen(
                                                             actionName: actionName,
-                                                            userId: userId,
+                                                            userId: email,
                                                           ),
                                                         ),
                                                       );

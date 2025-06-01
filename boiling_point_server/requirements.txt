@@ -9,3 +9,5 @@ fastapi
 uvicorn 
 sentence-transformers
 python-multipart
+passlib
+crypt

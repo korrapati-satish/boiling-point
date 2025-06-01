@@ -3,8 +3,6 @@ from langchain_community.llms import Replicate
 from langchain_community.vectorstores.pgvector import PGVector
 from langchain.prompts import PromptTemplate
 from ibm_watson_machine_learning.metanames import GenTextParamsMetaNames as GenParams
-from langchain.agents.output_parsers import JSONAgentOutputParser
-from langchain.output_parsers import OutputFixingParser
 from langchain_core.agents import AgentFinish
 from langchain.schema.runnable import RunnableLambda
 from langchain.agents import AgentExecutor
@@ -12,19 +10,32 @@ from langchain.tools import tool
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnableMap
-from langchain.chains import LLMChain
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi import UploadFile, File, Form
-from typing import List
+from typing import List,Optional
 from pydantic import BaseModel
 from jinja2 import Template
 import json
 import base64
+import io
+from PIL import Image, ImageOps
 from fastapi import File, UploadFile
 from sqlalchemy import LargeBinary
 from sqlalchemy import create_engine, Table, Column, update, String, JSON, MetaData
 from ibm_watsonx_ai.foundation_models import ModelInference
-from transformers import AutoProcessor
+from fastapi import Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+
+# Password hashing utility
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Dependency to get the database session
+def get_db():
+    with engine.connect() as connection:
+        yield connection
 
 credentials = {
     "url": 'https://us-south.ml.cloud.ibm.com',
@@ -47,25 +58,18 @@ text_llm = WatsonxLLM(
     },
 )
 
-image_llm = WatsonxLLM(
-    model_id="ibm/granite-vision-3-2-2b",
-    url=credentials.get("url"),
-    apikey=credentials.get("apikey"),
-    project_id=project_id,
-    params={
-        GenParams.DECODING_METHOD: "greedy",
-        GenParams.TEMPERATURE: 0,
-        GenParams.MIN_NEW_TOKENS: 5,
-        GenParams.MAX_NEW_TOKENS: 500
-    },
-)
-
-# image_llm = Replicate(
-#     model="ibm/granite-vision-3-2-2b",
-#     replicate_api_token=credentials.get("apikey")
-# )
-
-#vision_processor = AutoProcessor.from_pretrained("iibm-granite/granite-vision-3.2-2b")
+vision = ModelInference(
+        model_id = "ibm/granite-vision-3-2-2b",
+        credentials={
+                "apikey": credentials.get("apikey"),
+                "url": credentials.get("url")
+        },
+        project_id = project_id,
+        params = {
+            "max_tokens": 4096,
+            "temperature": 0
+        }
+    )
 
 embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-278m-multilingual")
 
@@ -84,12 +88,9 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 @tool
 def get_context(input: str):
     """Retrieve relevant context from the vector store based on a question."""
-    print(input)
+
     docs = retriever.get_relevant_documents(input)
-    print(docs)
     response = "\n\n".join([doc.page_content for doc in docs])
-    print("Retrieved context:")
-    print(response)
     return response
 
 
@@ -154,8 +155,8 @@ vision_steps_complete_template = """
 You are a sustainability implementation evaluator. You are given:
 
 1. The overall action the user is trying to implement.
-2. Step-by-step descriptions of what the user attempted.
-3. Photos showing the results of each step.
+2. Description of what the user attempted.
+3. Photo showing the results.
 4. Additional context to inform your understanding of the images.
 
 Context:
@@ -164,34 +165,11 @@ Context:
 Action:
 {{action}}
 
-Your task is to carefully observe each photo corresponding to each step, and describe everything you can infer from it, especially regarding the environment, objects, people, tools, progress, or any indicators of sustainability practices.
+Description:
+{{description}}
 
-{% for step, photo in steps_and_photos %}
-Step: {{ loop.index }}
-Description: {{ step }}
-Photo: [see attached image]
+Your task is to carefully observe photo , and describe everything you can infer from it in as per the provided context, action and description.
 
-{% endfor %}
-
-Instructions:
-- For each step, provide detailed visual observations.
-- Do NOT evaluate, rate, or provide opinions — only describe what you see and can infer from the image.
-- Include all visible elements relevant to the step.
-- Your response must follow this exact format and include **no extra text**:
-
-Respond **ONLY** with JSON in the exact format below. Do **NOT** add explanations or markdown fences.
-
-{
-"steps_and_observations":
-{% for step, photo in steps_and_photos %}
-"Step": {{ loop.index }}
-"Description": {{ step }}
-"Observation": "..."
-
-{% endfor %}
-}
-
-Do not include any additional text, explanation, or formatting outside the JSON object.
 
 """
 
@@ -210,24 +188,24 @@ Context:
 Action:
 {{action}}
 
-Evaluate the following steps based on their corresponding photos:
+Evaluate the following steps based on their corresponding description and observation:
 
-{% for step, description, observation in steps_and_observations %}
-Step: {{ step }}
+{% for description, observation in steps_and_observations %}
+Step: {{ loop.index }}
 Description: {{ description }}
 Observation: {{ observation }}
 
 {% endfor %}
 
 Instructions:
-- Based on all steps, rate the action from 1 (poor) to 5 (excellent) based on the each step and corresponding Observation.
+- Based on all steps, rate the action from 1 (poor) to 5 (excellent).
 - Provide 1-2 lines of feedback explaining your rating.
 - Be specific and reference context if needed.
 
-Respond **ONLY** with JSON in the exact format below. Do **NOT** add explanations or markdown fences.
+Respond **ONLY** with JSON in the exact format below. **The JSON keys must remain in English as shown. Only translate the values into {{language}}. Do **NOT** add explanations or markdown fences.
 
 {
-    "Action":{{action}}, ""Rating": "X/5", "Feedback": "..."
+    "Action":"{{action}}", "Rating": "X/5", "Feedback": "..."
 }
 
 Do not include any additional text, explanation, or formatting outside the JSON object.
@@ -249,16 +227,12 @@ text_jinja_template = Template(text_steps_completed_template)
 
 vision_jinja_template = Template(vision_steps_complete_template)
 
-# steps_completed_template = PromptTemplate(
-#     input_variables=["context", "action", "steps_and_photos"],  # placeholders used in the template string
-#     template=steps_completed_template
-# )
-
 def render_text_steps_prompt(inputs):
     rendered = text_jinja_template.render(
         context=inputs["context"],
         action=inputs["action"],
-        steps_and_photos=inputs["steps_and_photos"]
+        steps_and_observations=inputs["steps_and_observations"],  # List of tuples (description, observation)
+        language=inputs["language"]
     )
     return rendered
 
@@ -266,24 +240,18 @@ def render_vision_steps_prompt(inputs):
     rendered = vision_jinja_template.render(
         context=inputs["context"],
         action=inputs["action"],
-        steps_and_photos=inputs["steps_and_photos"]
+        description=inputs["description"]
     )
     return rendered
 
 def parse_json_output(text):
     try:
-        print("Raw LLM Output:", text)
-
         # Remove unwanted ''' and json string
         if text.startswith("'''json"):
             text = text.strip("'''json").strip("'''").strip()
         elif text.startswith("```json"):
             text = text.strip("```json").strip("```").strip()
-
-        print(text)
         parsed = json.loads(text)
-        print('parsing...')
-        print(parsed)
         return AgentFinish({"output": parsed}, text)
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse JSON: {e}\nOriginal text: {text}")
@@ -303,71 +271,82 @@ def contextual_follow_up_chain():
         "language": lambda x: x["language"],
     }) | follow_up_prompt_template | text_llm | RunnableLambda(parse_json_output)
 
-# def invoke_vision_llm():
-#     return RunnableLambda(lambda x: image_llm.invoke({
-#         "input": render_vision_steps_prompt({
-#             "context": x["context"],
-#             "action": x["action"],
-#             "steps_and_photos": [(step, "[see attached image]") for step, _ in x["steps_and_photos"]]
-#         }),
-#         "input_media": [
-#             {"type": "image", "data": photo}  # assume already base64
-#             for _, photo in x["steps_and_photos"]
-#         ]
-#     }))
+def encode_image(image_bytes: bytes, format: str = "PNG") -> str:
+    """
+    Converts raw image bytes to RGB and returns a base64-encoded string (no data URI prefix),
+    ready for input into Watsonx Vision model.
 
-def call_watsonx_vision_model(prompt: str, base64_images: list[str]):
-    # model = ModelInference(
-    #     model_id="ibm/granite-vision-3-2-2b",
-    #     url=credentials.get("url"),
-    #     apikey=credentials.get("apikey"),
-    #     project_id=project_id
-    # )
+    Args:
+        image_bytes: Raw image bytes (e.g., from Postgres BYTEA).
+        format: Format to encode in ('PNG' recommended).
 
-    # model_inference = ModelInference(
-    #         model_id="ibm/granite-vision-3-2-2b",
-    #         params={
-    #             GenParams.MAX_NEW_TOKENS: 25
-    #         },
-    #         credentials={
-    #             "apikey": credentials.get("apikey"),
-    #             "url": credentials.get("url")
-    #         },
-    #         project_id=project_id
-    #         )
-    
-    inputs = {
-        "input": prompt,
-        "input_media": [{"type": "image", "data": img} for img in base64_images],
-        "decoding_method": "greedy",
-        "temperature": 0,
-        "min_new_tokens": 5,
-        "max_new_tokens": 250
-    }
+    Returns:
+        base64-encoded image string (no prefix).
+    """
+    # Load image from bytes
+    image = Image.open(io.BytesIO(image_bytes))
 
-    # return model_inference.generate_text(params=inputs)
+    # Handle orientation from EXIF if needed
+    image = ImageOps.exif_transpose(image)
 
-    # return image_llm.invoke(prompt,image=base64_images)
-    return image_llm.invoke(input)
+    # Convert to RGB (some formats like PNG might include alpha)
+    image = image.convert("RGB")
 
-def prepare_image_payload():
-    return RunnableLambda(lambda x: call_watsonx_vision_model(
+    # Encode to base64
+    buffer = io.BytesIO()
+    image.save(buffer, format=format)
+    base64_encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+    return base64_encoded
+
+def call_watsonx_vision(prompt: str, steps_and_phots:list, action: str, context: str, language: str):
+
+    final_response = {"action": action, "context": context, "steps_and_observations": [], "language": language}
+
+    for step_desc, step_image in steps_and_phots:
+        message = [
+            {
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "text": prompt.format(description=step_desc)
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{step_image}",
+                    }
+                }]
+            }
+        ]
+        response = vision.chat(messages=message)
+
+        final_response['steps_and_observations'].append((step_desc,response['choices'][0]['message']['content']))
+
+    return final_response
+
+def fetch_image_description():
+    return RunnableLambda(lambda x: call_watsonx_vision(
         render_vision_steps_prompt({
             "context": x["context"],
             "action": x["action"],
-            "steps_and_photos": [(step, "[see attached image]") for step, _ in x["steps_and_photos"]]
+            "description": "{{{{description}}}}"
         }),
-        [photo for _, photo in x["steps_and_photos"]]
+        x["steps_and_photos"],
+        x["action"],
+        x["context"],
+        x["language"]
     ))
 
 text_chain = RunnableLambda(render_text_steps_prompt) | text_llm | RunnableLambda(parse_json_output)
 
 def contextual_steps_completed_chain():
     return RunnableMap({
-        "context": lambda x: get_context.invoke(x["input"]),
+        "context": lambda x: get_context.invoke(f"""Role: {x["role"]}, Location: {x["location"]}"""),
         "action": lambda x: x["action"],
-        "steps_and_photos": lambda x: [(step["step_description"], step["step_photos"]) for step in x["steps"]]
-    }) | prepare_image_payload() | text_chain
+        "steps_and_photos": lambda x: [(step["step_description"], step["step_photos"]) for step in x["steps"]],
+        "language": lambda x: x["language"]
+    }) | fetch_image_description() | text_chain
 
 options_agent = contextual_options_chain()
 
@@ -398,6 +377,18 @@ steps_completed_agent_executor = AgentExecutor(
 engine = create_engine(CONNECTION_STRING)
 metadata = MetaData()
 
+# Define the users table
+users_table = Table(
+    "users",
+    metadata,
+    Column("email_id", String, primary_key=True, nullable=False),
+    Column("name", String, nullable=False),
+    Column("password", String, nullable=False),  # Hashed password
+    Column("role", String, nullable=False),  # User's role (e.g., admin, user)
+    Column("location", String, nullable=False),  # User's location
+    Column("language", String, nullable=False),  # User's preferred language
+)
+
 # Define the steps table
 steps_table = Table(
     "user_steps",
@@ -418,6 +409,7 @@ actions_table = Table(
     Column("action_name", String, nullable=False),
     Column("rating", String, nullable=True), # Rating of the step.
     Column("rating_reason", String, nullable=True), # Rating reason of the step.
+    Column("status", String, default="pending"),  # Status of the action (e.g., pending, completed)
     Column("metadata", JSON, nullable=True),  # Optional metadata for the action
 )
 
@@ -426,6 +418,15 @@ metadata.create_all(engine)
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# Enable all cross-origin requests (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Models
 class UserRequest(BaseModel):
@@ -438,6 +439,7 @@ class ActionSelection(BaseModel):
     location: str
     email_id: str
     action: str
+    status: Optional[str] = None
     language: str
 
 class StepCompletion(BaseModel):
@@ -457,7 +459,6 @@ async def get_actions(request: UserRequest):
             "language": request.language
         })
 
-        print(response)
         return response  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving options: {str(e)}")
@@ -481,6 +482,13 @@ async def select_action(selection: ActionSelection):
 
         with engine.connect() as connection:
             transaction = connection.begin()  # Start a transaction
+            connection.execute(
+                    actions_table.insert()
+                    .values(
+                        email_id=selection.email_id,
+                        action_name=selection.action
+                    )
+            )
             for step_name, step_description in steps.items():
                 connection.execute(
                     steps_table.insert().values(
@@ -500,8 +508,6 @@ async def select_action(selection: ActionSelection):
             )
             steps_result = result.fetchall()
 
-            print(steps_result)
-
         return {"message": "Steps generated and persisted successfully", "steps": steps}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating steps: {str(e)}")
@@ -514,8 +520,6 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
         # Parse the stringified JSON into a Python list
         completion = json.loads(completion)
 
-        print(completion)
-
         # Ensure the number of step_data matches the number of photos
         if len(completion) != len(step_photos):
             raise HTTPException(status_code=400, detail="Please upload photo for each step selected.")
@@ -525,10 +529,7 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
 
             # Iterate over each step data and photo
             for step, step_photo in zip(completion, step_photos):
-                print(step)
                 photo_data = await step_photo.read()
-                #photo_data = base64.b64encode(photo_data).decode("utf-8")
-                print(photo_data)
                 connection.execute(
                     update(steps_table)
                     .where(
@@ -545,6 +546,9 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
         # Check if all steps for the given email_id and action_name are completed
         email_id = completion[0].get('email_id')
         action_name = completion[0].get('action')
+        location = completion[0].get('location')
+        role = completion[0].get('role')
+        language = completion[0].get('language')
         with engine.connect() as connection:
             transaction = connection.begin() 
             result = connection.execute(
@@ -556,45 +560,44 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
             )
             steps = result.mappings().all()
             transaction.commit()  #
-        print(steps)
 
         # Verify if all steps are completed
         all_completed = all(step["status"] == "completed" for step in steps)
 
         if all_completed:
-
+        
             response = steps_completed_agent_executor.invoke({
-                "input": "ground water",
+                "role": role,
+                "location": location,
                 "action": action_name,
+                "language": language,
                 "steps": [
                     {
                         "step_description": step["step_description"],
-                        "step_photos": base64.b64encode(step["photos"]).decode("utf-8")
+                        "step_photos": encode_image(step["photos"]) if step["photos"] else ""
                     } for step in steps
                 ]
                 })
 
-            print('here')
-            print(response.get("output",{}))
             # Convert response into a list of dictionaries
             
             parsed_data = {"rating": response.get("output",{}).get("Rating",{}), "reason": response.get("output",{}).get("Feedback",{})}
 
-            print(parsed_data)
-
             # Update the rating column in the database
             with engine.connect() as connection:
+                transaction = connection.begin() 
                 connection.execute(
                     update(actions_table)
                     .where(
-                        steps_table.c.email_id == email_id,
-                        steps_table.c.action_name == action_name
+                        actions_table.c.email_id == email_id,
+                        actions_table.c.action_name == action_name
                     )
                     .values(
                         rating=parsed_data["rating"],
                         rating_reason=parsed_data["reason"]
                     )
                 )
+                transaction.commit()
 
             return {"message": "All Steps completed and rated successfully", "ratings": parsed_data}
 
@@ -604,21 +607,82 @@ async def submit_steps(completion: str = Form(...),step_photos: List[UploadFile]
         raise e
         raise HTTPException(status_code=500, detail=f"Error submitting steps: {str(e)}")
     
-@app.get("/health")
-def test_vector():
+@app.post("/login")
+async def login(email_id: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     try:
-        # Step 1: Check vector dimension
-        query_vector = embeddings.embed_query("test")
-        print(f"Vector dimension: {len(query_vector)}") 
+        # Query the user from the database
+        query = users_table.select().where(users_table.c.email_id == email_id)
+        user_result = db.execute(query).mappings().fetchone()
 
-        # Step 2: Add test documents if needed
-        vectorstore.add_texts(["soil contains nitrogen", "nitrogen is important", "plants absorb nitrogen"])
+        if not user_result:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Validate the password
+        stored_password = user_result["password"]
+        if not pwd_context.verify(password, stored_password):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Fetch user actions
+        actions_query = actions_table.select().where(actions_table.c.email_id == email_id)
+        actions_result = db.execute(actions_query).mappings().fetchall()
 
-        # Perform a simple query to test the vector store connection
-        docs = vectorstore.similarity_search("""soil contains units of nitrogen""",k=3)
-        if docs:
-            return {"status": "ok", "message": "Vector store is healthy."}
-        else:
-            return {"status": "error", "message": "No documents found in vector store."}
+        # Format the response
+        user_details = {
+            "email_id": user_result["email_id"],
+            "name": user_result["name"],
+            "role": user_result["role"],
+            "actions": [
+                {
+                    "action_name": action["action_name"],
+                    "status": action["status"]
+                }
+                for action in actions_result
+            ],
+            "location": user_result["location"],
+            "language": user_result["language"]
+        }
+
+        return {"message": "Login successful", "user": user_details}
+
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail=f"Error during login: {str(e)}")
+    
+
+@app.post("/signup")
+async def signup(
+    email_id: str = Form(...),
+    password: str = Form(...),
+    name: str = Form(...),
+    role: str = Form(...),
+    location: str = Form(...),
+    language: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Hash the password
+        hashed_password = pwd_context.hash(password)
+
+        with db.begin():
+            # Insert the user into the database
+            query = users_table.insert().values(
+                email_id=email_id,
+                password=hashed_password,
+                name=name,
+                role=role,
+                location=location,
+                language=language
+            )
+            db.execute(query)
+
+        return {"message": "User registered successfully"}
+
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email ID already exists"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error during signup: {str(e)}"
+        )

@@ -118,17 +118,33 @@ flutter clean                 # Clear build cache
 
 ---
 
+## 🔥 Running the Backend (`boiling_point_server`)
+
+If your Flutter app depends on a backend service, follow these steps to run the Python backend locally:
+
+1. **Install Python dependencies**  
+   Navigate to the backend directory and install requirements:
+
+   ```bash
+   cd boiling_point_server
+   pip install -r requirements.txt
+   ```
+
+2. **Start the backend server**  
+   Use `gunicorn` to run the service (replace `app:app` with your entrypoint if different):
+
+   ```bash
+   uvicorn boiling_point:app --reload
+   ```
+
+   > _Make sure the backend is running before launching the Flutter app if it depends on API calls._
+
+---
 ## 📦 Resources
 
 - Flutter Docs: [flutter.dev/docs](https://flutter.dev/docs)
 - Flutter Setup Video: [YouTube Flutter Setup](https://www.youtube.com/results?search_query=flutter+setup+android+studio)
 - Dart Language: [dart.dev](https://dart.dev)
-
----
-
-## 🧑‍💻 Author
-
-**Your Name**  
-Email: lokithraj@email.com
-
----
+- Gunicorn Docs: [gunicorn.org](https://gunicorn.org/)
+- Gunicorn Quickstart: [Gunicorn Quickstart Guide](https://docs.gunicorn.org/en/stable/run.html)
+- Python Docs: [python.org](https://www.python.org/doc/)

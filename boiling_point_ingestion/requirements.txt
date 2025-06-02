@@ -1,0 +1,7 @@
+pandas
+sqlalchemy
+pgvector
+jinja2
+python-dotenv
+transformers
+torch

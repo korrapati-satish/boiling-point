@@ -4,7 +4,7 @@ A new FastAPI project.
 
 ## Getting Started
 
-pip3 install langchain langchain-ibm langchain_community ibm-watsonx-ai ibm_watson_machine_learning pgvector psycopg2-binary fastapi uvicorn sentence-transformers
+pip install langchain langchain-ibm langchain_community ibm-watsonx-ai ibm_watson_machine_learning pgvector psycopg2-binary fastapi uvicorn sentence-transformers
 
 source venv/bin/activate
 
@@ -46,3 +46,8 @@ Or via command line:
 6. When you run the above command please provide the service name that you want to expose and the region where you want to deploy the service.
 7. After doing the above steps it will build and deploy in google cloud and after successful execution of the command you will get the service url where the api's has been exposed.
 
+
+uvicorn boiling_point:app --reload
+
+User Name: postgres
+Password: T8UQUIPiu#IZOZe3

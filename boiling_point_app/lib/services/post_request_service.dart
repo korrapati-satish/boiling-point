@@ -13,7 +13,8 @@ class _PostRequestWithButtonState extends State<PostRequestWithButton> {
   String responseText = 'Click the button to send POST request';
 
   Future<void> sendPostRequest() async {
-    const url = 'https://jsonplaceholder.typicode.com/posts';
+    // const url = 'http://127.0.0.1:8000/get-options';
+    final url = 'https://boiling-point-server-566823910614.us-south1.run.app/get-actions';
 
     final headers = {"Content-Type": "application/json"};
     final body = jsonEncode({

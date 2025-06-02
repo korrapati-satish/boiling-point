@@ -35,7 +35,7 @@ from google.cloud.alloydbconnector.enums import IPTypes
 
 
 # --- Hardcoded configuration for both local and cloud ---
-USE_ALLOYDB_CONNECTOR = True  # Set to True to use AlloyDB connector (cloud), False for local
+USE_ALLOYDB_CONNECTOR = False  # Set to True to use AlloyDB connector (cloud), False for local
 
 # Password hashing utility
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -44,10 +44,12 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def get_db():
     with engine.connect() as connection:
         yield connection
+from transformers import AutoProcessor
+from fastapi.middleware.cors import CORSMiddleware
 
 credentials = {
     "url": 'https://us-south.ml.cloud.ibm.com',
-    "apikey": 'XDiRCehfnJA-BSC_URM_PgCT-TQoznaYhd5jJZ0PKHZi'
+    "apikey": 'GUqW4lwE8DZGPl-DvXavZY6cvVt7no6Ni34YUm2etseJ'
 }
 
 project_id = '4bf4e5d6-d94c-4b68-85af-c9d0206e0194'
@@ -162,81 +164,81 @@ def get_context(input: str):
 tools = [get_context]
 
 options_prompt_template = """
-You are an expert advisor on climate action.
+    You are an expert advisor on climate action.
 
-Use the following context to help answer the question:
+    Use the following context to help answer the question:
 
-{context}
+    {context}
 
-Given the role: **{role}**  
-And the location: **{location}**
+    Given the role: **{role}**  
+    And the location: **{location}**
 
-Suggest the **three most impactful and realistic actions** that this person can take to help solve or mitigate climate problems in India. Each action should be:
+    Suggest the **three most impactful and realistic actions** that this person can take to help solve or mitigate climate problems in India. Each action should be:
 
-1. Aligned with the person's capabilities and influence based on their role.
-2. Locally relevant to the environmental and socio-economic context of the location.
-3. Feasible, measurable, and contributing toward long-term sustainability.
+    1. Aligned with the person's capabilities and influence based on their role.
+    2. Locally relevant to the environmental and socio-economic context of the location.
+    3. Feasible, measurable, and contributing toward long-term sustainability.
 
-Respond **ONLY** in exact JSON format below. **The JSON keys must remain in English as shown. Only translate the values into {language}.** Do **NOT** add explanations or markdown fences.
+    Respond **ONLY** in exact JSON format below. **The JSON keys must remain in English as shown. Only translate the values into {language}.** Do **NOT** add explanations or markdown fences.
 
-{{
-  "Action 1": "First action description.",
-  "Action 2": "Second action description.",
-  "Action 3": "Third action description."
-}}
+    {{
+    "Action 1": "First action description.",
+    "Action 2": "Second action description.",
+    "Action 3": "Third action description."
+    }}
 
-(Include 3–5 clear actions. Be specific and practical.)
+    (Include 3–5 clear actions. Be specific and practical.)
 
-Do not include any additional text, explanation, or formatting outside the JSON object.
+    Do not include any additional text, explanation, or formatting outside the JSON object.
 
-"""
+    """
 
 follow_up_prompt_template = """
-You are an expert sustainability advisor helping users take action on climate issues.
+    You are an expert sustainability advisor helping users take action on climate issues.
 
-Context:
-{context}
+    Context:
+    {context}
 
-Selected Action:
-{action}
+    Selected Action:
+    {action}
 
-Based on the above context and the selected action, provide a concise, step-by-step guide that the user can follow to implement this action effectively in India.
+    Based on the above context and the selected action, provide a concise, step-by-step guide that the user can follow to implement this action effectively in India.
 
-Respond **ONLY** in exact JSON format below. **The JSON keys must remain in English as shown. Only translate the values into {language}.** Do **NOT** add explanations or markdown fences.
+    Respond **ONLY** in exact JSON format below. **The JSON keys must remain in English as shown. Only translate the values into {language}.** Do **NOT** add explanations or markdown fences.
 
-{{
-  "Step 1": "First step description.",
-  "Step 2": "Second step description.",
-  "Step 3": "Third step description."
-}}
+    {{
+    "Step 1": "First step description.",
+    "Step 2": "Second step description.",
+    "Step 3": "Third step description."
+    }}
 
-(Include 3–5 clear steps. Be specific and practical.)
+    (Include 3–5 clear steps. Be specific and practical.)
 
-Do not include any additional text, explanation, or formatting outside the JSON object.
+    Do not include any additional text, explanation, or formatting outside the JSON object.
 
-"""
+    """
 
 vision_steps_complete_template = """
-You are a sustainability implementation evaluator. You are given:
+    You are a sustainability implementation evaluator. You are given:
 
-1. The overall action the user is trying to implement.
-2. Description of what the user attempted.
-3. Photo showing the results.
-4. Additional context to inform your understanding of the images.
+    1. The overall action the user is trying to implement.
+    2. Description of what the user attempted.
+    3. Photo showing the results.
+    4. Additional context to inform your understanding of the images.
 
-Context:
-{{context}}
+    Context:
+    {{context}}
 
-Action:
-{{action}}
+    Action:
+    {{action}}
 
-Description:
-{{description}}
+    Description:
+    {{description}}
 
-Your task is to carefully observe photo , and describe everything you can infer from it in as per the provided context, action and description.
+    Your task is to carefully observe photo , and describe everything you can infer from it in as per the provided context, action and description.
 
 
-"""
+    """
 
 
 text_steps_completed_template = """
@@ -481,6 +483,7 @@ actions_table = Table(
 metadata.create_all(engine)
 
 # Initialize FastAPI app
+
 app = FastAPI()
 
 # Enable all cross-origin requests (CORS)
@@ -539,8 +542,6 @@ async def select_action(selection: ActionSelection):
             "language": selection.language
         })
 
-        #do a vector search based on role, location and add language
-
         # Extract the "output" key from the response
         steps = response.get("output", {})  # Get the dictionary of steps
 
@@ -570,7 +571,7 @@ async def select_action(selection: ActionSelection):
                     steps_table.c.action_name == selection.action
                 )
             )
-            steps_result = result.fetchall()
+            steps_result = result.mappings().all()
 
         return {"message": "Steps generated and persisted successfully", "steps": steps}
     except Exception as e:

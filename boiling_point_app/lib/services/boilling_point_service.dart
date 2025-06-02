@@ -46,6 +46,7 @@ Future<List<BoingPointAction>> fetchActions() async {
 Future<BoilingPoint> getBoilingPointActions(String role, String location, String language) async {
   //const url = 'http://127.0.0.1:8000/get-actions';
   final url = 'http://10.0.2.2:8000/get-actions';
+  //final url = 'https://boiling-point-server-566823910614.us-south1.run.app/get-actions';
 
   final headers = {"Content-Type": "application/json"};
   final body = jsonEncode({
@@ -61,9 +62,11 @@ Future<BoilingPoint> getBoilingPointActions(String role, String location, String
   try {
     final response = await http.post(Uri.parse(url), headers: headers, body: body);
     print('[getBoilingPointActions] Response status: ${response.statusCode}');
-    print('[getBoilingPointActions] Response body: ${response.body}');
+    // Decode response body as UTF-8 for proper Hindi font display
+    final decodedBody = utf8.decode(response.bodyBytes);
+    print('[getBoilingPointActions] Response body (UTF-8): $decodedBody');
     if (response.statusCode == 200) {
-      final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+      final Map<String, dynamic> jsonResponse = jsonDecode(decodedBody);
       print('[getBoilingPointActions] Decoded JSON: $jsonResponse');
       return BoilingPoint.fromJson(jsonResponse);
     } else {
@@ -82,11 +85,13 @@ Future<BoilingPoint> getBoilingPointActions(String role, String location, String
 Future<BoilingPointStepsResponse> fetchBoilingPointActionSteps(String emailId, String action, String role, String location, String selectedLanguage) async {
   // const url = 'http://127.0.0.1:8000/select-action';
   final url = 'http://10.0.2.2:8000/select-action';
+  //final url = 'https://boiling-point-server-566823910614.us-south1.run.app/select-action';
   final headers = {"Content-Type": "application/json"};
   final body = jsonEncode({
     "email_id": emailId,
     "action": action,
     "role": role,
+    "status": "Pending", // Assuming status is always "Pending" for this request
     "location": location,
     "language": selectedLanguage // Add the required language field
   });
@@ -98,9 +103,11 @@ Future<BoilingPointStepsResponse> fetchBoilingPointActionSteps(String emailId, S
   try {
     final response = await http.post(Uri.parse(url), headers: headers, body: body);
     print('[fetchBoilingPointActionSteps] Response status: ${response.statusCode}');
-    print('[fetchBoilingPointActionSteps] Response body: ${response.body}');
+    // Decode response body as UTF-8 for proper Hindi font display
+    final decodedBody = utf8.decode(response.bodyBytes);
+    print('[fetchBoilingPointActionSteps] Response body (UTF-8): $decodedBody');
     if (response.statusCode == 200) {
-      final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+      final Map<String, dynamic> jsonResponse = jsonDecode(decodedBody);
       final stepsMap = jsonResponse['steps'] as Map<String, dynamic>;
       final message = jsonResponse['message']?.toString() ?? '';
       // Sort steps by key (e.g., "Step 1", "Step 2", ...)

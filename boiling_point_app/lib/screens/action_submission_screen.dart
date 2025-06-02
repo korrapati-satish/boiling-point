@@ -42,14 +42,14 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage();
 
-    if (pickedFiles != null && pickedFiles.isNotEmpty) {
+    if (pickedFiles.isNotEmpty) {
       setState(() {
-      // Add all selected images to the list
-      _selectedFiles = pickedFiles.map((xfile) => File(xfile.path)).toList();
-      // For preview and upload, pick the first image (can be changed for multi-upload)
-      _selectedFile = File(pickedFiles.first.path);
-      _fileType = 'image';
-      _uploadStatus = null;
+        // Add all selected images to the list
+        _selectedFiles = pickedFiles.map((xfile) => File(xfile.path)).toList();
+        // For preview and upload, pick the first image (can be changed for multi-upload)
+        _selectedFile = File(pickedFiles.first.path);
+        _fileType = 'image';
+        _uploadStatus = null;
       });
     }
   }
@@ -64,6 +64,8 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
 
     try {
       var uri = Uri.parse('http://10.0.2.2:8000/submit-steps');
+      //var uri = Uri.parse('https://boiling-point-server-566823910614.us-south1.run.app/submit-steps');      
+
       var request = http.MultipartRequest('POST', uri);
 
       // Add the completion field (as in your curl)

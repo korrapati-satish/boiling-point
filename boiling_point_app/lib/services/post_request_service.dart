@@ -14,7 +14,7 @@ class _PostRequestWithButtonState extends State<PostRequestWithButton> {
 
   Future<void> sendPostRequest() async {
     // const url = 'http://127.0.0.1:8000/get-options';
-    final url = 'http://10.0.2.2:8000/get-actions';
+    final url = 'https://boiling-point-server-566823910614.us-south1.run.app/get-actions';
 
     final headers = {"Content-Type": "application/json"};
     final body = jsonEncode({

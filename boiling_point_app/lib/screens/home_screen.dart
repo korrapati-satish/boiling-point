@@ -27,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? selectedLivelihood;
   String? selectedLanguage;
   
-  late Future<BoilingPoint> boilingPoint;
+  late Future<BoilingPoint> boilingPoint = Future.value(BoilingPoint(role:'', location:'', actions: []));
   late Future<BoilingPointStepsResponse> boilingPointStepsResponse;
 
   List<BoilingPointActionStep> _currentSteps = [];
@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();  
 
-    boilingPoint = getBoilingPointActions('Farmer', 'Bengaluru', 'English');
+    //boilingPoint = getBoilingPointActions('Farmer', 'Bengaluru', 'English');
 
     // boilingPointStepsResponse = fetchBoilingPointActionSteps(
     //   email,
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => UserProfileScreen(
-                    userName: 'John Doe',
+                    userName: 'John',
                     role: 'Farmer',
                     detail: 'NGO Volunteer',
                     greenPoints: 75,
@@ -213,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'My Actions',
+                          'My New Actions',
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         const SizedBox(height: 10),
@@ -268,7 +268,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       elevation: 4,
                                       child: ExpansionTile(
                                         title: Text(action.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        subtitle: Text(action.description),
+                                        subtitle: Text(
+                                          action.description,
+                                          style: const TextStyle(
+                                          fontFamily: 'NotoSansDevanagari', // Use system default, supports most scripts
+                                          fontSize: 15,
+                                          ),
+                                        ),
                                         children: [
                                           Padding(
                                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -277,57 +283,73 @@ class _HomeScreenState extends State<HomeScreen> {
                                               children: [
                                                 ElevatedButton.icon(
                                                   style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.orange[700],
-                                                    shape: RoundedRectangleBorder(
-                                                        borderRadius: BorderRadius.circular(10)),
+                                                  backgroundColor: Colors.orange[700],
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(10)),
                                                   ),
                                                   icon: const Icon(Icons.list_alt),
                                                   label: const Text('Steps'),
-                                                  onPressed: () async {                                                  
+                                                  onPressed: () async {
+                                                  showDialog(
+                                                    context: context,
+                                                    barrierDismissible: false,
+                                                    builder: (context) => const Center(
+                                                    child: CircularProgressIndicator(),
+                                                    ),
+                                                  );
+                                                  try {
                                                     final stepsResponse = await fetchBoilingPointActionSteps(
-                                                      email,
-                                                      action.description,
-                                                      selectedLivelihood ?? 'Farming',
-                                                      selectedRegion ?? 'Andhra Pradesh',
-                                                      selectedLanguage  ?? 'English',
+                                                    email,
+                                                    action.description,
+                                                    selectedLivelihood ?? 'Farming',
+                                                    selectedRegion ?? 'Andhra Pradesh',
+                                                    selectedLanguage ?? 'English',
                                                     );
-                                                    setState(() {
-                                                      _currentSteps = stepsResponse.steps;
-                                                    });
                                                     if (!mounted) return;
+                                                    setState(() {
+                                                    _currentSteps = stepsResponse.steps;
+                                                    });
+                                                    Navigator.of(context).pop(); // Remove loader
                                                     showDialog(
-                                                      context: context,
-                                                      builder: (context) => AlertDialog(
-                                                        title: Text('Steps for "${action.title}"'),
-                                                        content: SizedBox(
-                                                          width: double.maxFinite,
-                                                          child: stepsResponse.steps.isNotEmpty
-                                                              ? SingleChildScrollView(
-                                                                  child: Column(
-                                                                    mainAxisSize: MainAxisSize.min,
-                                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                                    children: [
-                                                                      ...stepsResponse.steps.map<Widget>(
-                                                                        (step) => ListTile(
-                                                                          leading: const Icon(Icons.check_circle_outline),
-                                                                          title: Text(step.description.isNotEmpty
-                                                                              ? step.description
-                                                                              : 'Step'),
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                                )
-                                                              : const Text('No steps available.'),
-                                                        ),
-                                                        actions: [
-                                                          TextButton(
-                                                            onPressed: () => Navigator.of(context).pop(),
-                                                            child: const Text('Close'),
+                                                    context: context,
+                                                    builder: (context) => AlertDialog(
+                                                      title: Text('Steps for "${action.title}"'),
+                                                      content: SizedBox(
+                                                      width: double.maxFinite,
+                                                      child: stepsResponse.steps.isNotEmpty
+                                                        ? SingleChildScrollView(
+                                                          child: Column(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                            ...stepsResponse.steps.map<Widget>(
+                                                              (step) => ListTile(
+                                                              leading: const Icon(Icons.check_circle_outline),
+                                                              title: Text(step.description.isNotEmpty
+                                                                ? step.description
+                                                                : 'Step'),
+                                                              ),
+                                                            ),
+                                                            ],
                                                           ),
-                                                        ],
+                                                          )
+                                                        : const Text('No steps available.'),
                                                       ),
+                                                      actions: [
+                                                      TextButton(
+                                                        onPressed: () => Navigator.of(context).pop(),
+                                                        child: const Text('Close'),
+                                                      ),
+                                                      ],
+                                                    ),
                                                     );
+                                                  } catch (e) {
+                                                    if (!mounted) return;
+                                                    Navigator.of(context).pop(); // Remove loader
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text('Failed to fetch steps: $e')),
+                                                    );
+                                                  }
                                                   },
                                                 ),
                                                 const SizedBox(height: 8),

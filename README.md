@@ -117,7 +117,7 @@ flutter clean                 # Clear build cache
 
 ---
 
-## 🔥 Running the Backend (`boiling_point_server`)
+# 🔥 Running the Backend (`boiling_point_server`)
 
 # Boiling Point Server - FastAPI
 This README provides instructions to set up and run the FastAPI application on the Boiling Point server.

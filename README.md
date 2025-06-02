@@ -1,4 +1,4 @@
-# Flutter & Backend Setup Guide with Android Studio and Emulator
+# Flutter & Backend Setup Guide with Android Studio 
 
 This guide provides step-by-step instructions for setting up a Flutter development environment using Android Studio, creating and running a Flutter app on an Android emulator, and setting up the backend server.
 

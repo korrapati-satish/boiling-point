@@ -6,15 +6,13 @@ import 'package:boiling_point_app/services/boilling_point_service.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
-  final String email;
-  const HomeScreen({super.key, required this.email});
-
+  
   static Route routeFromArgs(RouteSettings settings) {
     final args = settings.arguments as Map<String, dynamic>?;
     final email = args?['email'] as String? ?? '';
     debugPrint('HomeScreen.routeFromArgs: email = $email');
     return MaterialPageRoute(
-      builder: (_) => HomeScreen(email: email),
+      builder: (_) => HomeScreen(),
       settings: settings,
     );
   }
@@ -32,33 +30,29 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<BoilingPoint> boilingPoint;
   late Future<BoilingPointStepsResponse> boilingPointStepsResponse;
 
+  List<BoilingPointActionStep> _currentSteps = [];
+
   final List<String> regions = [
     'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Ahmedabad', 'Chennai', 'Kolkata', 'Surat', 'Pune', 'Jaipur', 'Lucknow', 'Kanpur', 'Nagpur', 'Indore', 'Thane', 'Bhopal', 'Visakhapatnam', 'Pimpri-Chinchwad', 'Patna', 'Vadodara', 'Ghaziabad', 'Ludhiana', 'Coimbatore', 'Agra', 'Madurai',
   ];
   final List<String> livelihoods = ['Farming', 'Fishing', 'Trading', 'Labor'];
   final List<String> languages = ['Hindi', 'Tamil', 'Telugu', 'Kannada', 'English'];
 
-  late String email;
+  late String email = "john@gmail.com";
 
   @override
   void initState() {
-    super.initState();
-    email = widget.email.isNotEmpty ? widget.email : 'john@gmail.com';
-    debugPrint('HomeScreen initialized with email: $email');
-    // Log the email if it's not empty
-    if (email.isNotEmpty) {
-      debugPrint('User email: $email');
-    }
+    super.initState();  
 
-    //boilingPoint = getBoilingPointActions('Farmer', 'Bengaluru', 'English');
+    boilingPoint = getBoilingPointActions('Farmer', 'Bengaluru', 'English');
 
-    boilingPointStepsResponse = fetchBoilingPointActionSteps(
-      email,
-      'Promote eco-friendly dog waste management',
-      selectedLivelihood ?? 'Farming',
-      selectedRegion ?? 'Andhra Pradesh',
-      selectedLanguage ?? 'English',
-    );
+    // boilingPointStepsResponse = fetchBoilingPointActionSteps(
+    //   email,
+    //   'Promote eco-friendly dog waste management',
+    //   selectedLivelihood ?? 'Farming',
+    //   selectedRegion ?? 'Andhra Pradesh',
+    //   selectedLanguage ?? 'English',
+    // );
   }
 
 
@@ -79,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 MaterialPageRoute(
                   builder: (context) => UserProfileScreen(
                     userName: 'John Doe',
-                    role: 'User',
+                    role: 'Farmer',
                     detail: 'NGO Volunteer',
                     greenPoints: 75,
                   ),
@@ -297,6 +291,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                                       selectedRegion ?? 'Andhra Pradesh',
                                                       selectedLanguage  ?? 'English',
                                                     );
+                                                    setState(() {
+                                                      _currentSteps = stepsResponse.steps;
+                                                    });
                                                     if (!mounted) return;
                                                     showDialog(
                                                       context: context,
@@ -349,8 +346,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                                         context,
                                                         MaterialPageRoute(
                                                           builder: (context) => ActionSubmissionScreen(
-                                                            actionName: actionName,
-                                                            userId: email,
+                                                            action: actionName,
+                                                            emailId: email,
+                                                            location: selectedRegion ?? 'Bengaluru',
+                                                            role: selectedLivelihood ?? 'Farming',
+                                                            steps: _currentSteps,
                                                           ),
                                                         ),
                                                       );

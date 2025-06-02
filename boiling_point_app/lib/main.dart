@@ -18,7 +18,7 @@ class BoilingPointApp extends StatelessWidget {
       routes: {
         '/': (context) => const LoginScreen(),
         '/signup': (context) => const SignUpScreen(),
-        '/home': (context) => HomeScreen(email: ''), // Provide a default or actual email here
+        '/home': (context) => HomeScreen(), // Provide actual values as needed
       },
     );
   }

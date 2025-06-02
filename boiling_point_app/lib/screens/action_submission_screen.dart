@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:boiling_point_app/models/boiling_point.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,13 +9,19 @@ import 'package:path/path.dart';
 import 'package:http_parser/http_parser.dart';
 
 class ActionSubmissionScreen extends StatefulWidget {
-  final String actionName;
-  final String userId;
+  final String action;
+  final String emailId;
+  final String location;
+  final String role;
+  final List<BoilingPointActionStep> steps;
 
   const ActionSubmissionScreen({
     Key? key,
-    required this.actionName,
-    required this.userId,
+    required this.action,
+    required this.emailId,
+    required this.location,
+    required this.role,
+    required this.steps,
   }) : super(key: key);
 
   @override
@@ -60,7 +67,17 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
       var request = http.MultipartRequest('POST', uri);
 
       // Add the completion field (as in your curl)
-      request.fields['completion'] = '[{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Educate farmers about sustainable farming practices such as crop rotation, intercropping, and organic farming. This can be done through workshops, training sessions, and demonstrations."},{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Promote the use of locally adapted crop varieties that are resilient to local climate conditions and require less water. Distribute seeds and provide information on their cultivation."},{"email_id":"john@gmail.com","role":"Farmere","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Establish a network of local extension services to provide ongoing support and guidance to farmers. This can include regular visits to farms, monitoring of farming practices, and timely advice."},{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Encourage the adoption of organic farming by providing resources and support for farmers to transition from conventional to organic practices. This can include assistance with certification processes and access to organic inputs."},{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Monitor and evaluate the impact of these practices on soil health, water consumption, and productivity. Use this information to refine and improve farming practices over time."}]';
+      //request.fields['completion'] = '[{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Educate farmers about sustainable farming practices such as crop rotation, intercropping, and organic farming. This can be done through workshops, training sessions, and demonstrations."},{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Promote the use of locally adapted crop varieties that are resilient to local climate conditions and require less water. Distribute seeds and provide information on their cultivation."},{"email_id":"john@gmail.com","role":"Farmere","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Establish a network of local extension services to provide ongoing support and guidance to farmers. This can include regular visits to farms, monitoring of farming practices, and timely advice."},{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Encourage the adoption of organic farming by providing resources and support for farmers to transition from conventional to organic practices. This can include assistance with certification processes and access to organic inputs."},{"email_id":"john@gmail.com","role":"Farmer","location":"Bangalore","action":"Implement sustainable farming practices such as crop rotation, intercropping, and organic farming to maintain soil health, reduce water consumption, and minimize chemical use. This approach can improve productivity, resilience, and long-term sustainability.","step_description":"Monitor and evaluate the impact of these practices on soil health, water consumption, and productivity. Use this information to refine and improve farming practices over time."}]';
+
+      request.fields['completion'] = jsonEncode(widget.steps.map((step) => {
+        'email_id': widget.emailId,
+        'role': widget.role,
+        'location': widget.location,
+        'action': widget.action,
+        'step_description': step.description,
+      }).toList());
+
+      print('Completion field: ${request.fields['completion']}');
 
       // Add all selected images as 'step_photos'
       for (var file in _selectedFiles) {
@@ -89,9 +106,6 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
       print('Response body: $respStr');
 
       // Parse JSON and extract message, rating, and reason
-    
-
-
 
       setState(() {
       _isUploading = false;
@@ -228,7 +242,7 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          widget.actionName,
+                          widget.action,
                           style: TextStyle(
                           fontSize: 18,
                           color: Colors.white,
@@ -239,10 +253,35 @@ class _ActionSubmissionScreenState extends State<ActionSubmissionScreen> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'User: ${widget.userId}',
+                          'User: ${widget.emailId}',
                           style: TextStyle(
                           fontSize: 14,
                           color: Colors.white60,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Role: ${widget.role}',
+                          style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white60,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Location: ${widget.location}',
+                          style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white60,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Number of Steps: ${widget.steps.length}',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         ],

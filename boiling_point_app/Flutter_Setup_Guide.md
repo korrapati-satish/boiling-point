@@ -129,7 +129,6 @@ flutter clean                 # Clear build cache
 ## 🧑‍💻 Author
 
 **Your Name**  
-[Your GitHub Profile](https://github.com/yourusername)  
-Email: your@email.com
+Email: lokithraj@email.com
 
 ---
